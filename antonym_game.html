@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Antonym Match</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1d2447;
+    --sky-top: #9fd8f5;
+    --sky-bot: #e8f6ff;
+    --grass: #5cc26a;
+    --grass-dark: #3a9b4b;
+    --soil: #8a5a3c;
+    --sun: #ffc233;
+    --coral: #ff6b57;
+    --teal: #22b8a6;
+    --violet: #8467ff;
+    --blue: #3d9dff;
+    --card: #fffdf7;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: "Fredoka", "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+    color: var(--ink);
+    background: linear-gradient(var(--sky-top), var(--sky-bot));
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #app { height: 100%; display: flex; flex-direction: column; }
+
+  /* ---------- HUD ---------- */
+  #hud {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 16px; background: var(--card);
+    border-bottom: 4px solid var(--ink);
+  }
+  .badge {
+    padding: 6px 16px; border-radius: 999px; font-weight: 700; font-size: 20px;
+    color: #fff; border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--ink);
+  }
+  .badge.p1 { background: var(--coral); }
+  .badge.p2 { background: var(--blue); }
+  #score { font-size: 34px; font-weight: 700; line-height: 1; }
+  #score small { font-size: 16px; font-weight: 500; opacity: .6; margin-right: 6px; }
+  #level { font-size: 17px; font-weight: 600; opacity: .75; min-width: 90px; text-align: right; }
+
+  /* ---------- Play field ---------- */
+  #field { position: relative; flex: 1; overflow: hidden; }
+  #field::after { /* ground */
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 28px;
+    background: linear-gradient(var(--grass) 0 10px, var(--soil) 10px);
+    border-top: 4px solid var(--grass-dark);
+  }
+  #dangerLine {
+    position: absolute; left: 0; right: 0; height: 0;
+    border-top: 3px dashed rgba(255, 107, 87, .7); pointer-events: none;
+  }
+  #dangerLine span {
+    position: absolute; right: 10px; top: 4px; font-size: 13px; font-weight: 600;
+    color: var(--coral);
+  }
+
+  .block {
+    position: absolute; left: 0; top: 0;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    font: 600 26px/1 "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+    color: var(--ink); cursor: pointer; user-select: none;
+    border: 3px solid var(--ink); border-radius: 14px;
+    box-shadow: 0 5px 0 var(--ink); will-change: transform;
+    padding: 0 10px;
+  }
+  .block.settled { transition: transform .28s cubic-bezier(.3, 1.4, .5, 1); }
+  .block:focus-visible { outline: 4px solid var(--ink); outline-offset: 3px; }
+  .block .ico { width: 20px; height: 20px; flex: none; opacity: .55; }
+  .block .inner { display: flex; align-items: center; gap: 8px; }
+  .block.selected .inner { animation: bob .5s ease-in-out infinite alternate; }
+  .block.selected { background: var(--sun) !important; box-shadow: 0 5px 0 var(--ink), 0 0 0 6px #fff, 0 0 0 9px var(--ink); z-index: 5; }
+  .block.wrong .inner { animation: shake .45s; }
+  .block.wrong { background: #ff8c7c !important; }
+  .block.pop .inner { animation: pop .3s forwards; }
+  .block.pop { pointer-events: none; }
+  .c0 { background: #ffd7cf; } .c1 { background: #c8f1ea; } .c2 { background: #dcd3ff; }
+  .c3 { background: #cfe6ff; } .c4 { background: #ffeaa8; }
+
+  @keyframes bob { to { transform: translateY(-5px); } }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0) rotate(0); }
+    20% { transform: translateX(-9px) rotate(-4deg); }
+    40% { transform: translateX(9px) rotate(4deg); }
+    60% { transform: translateX(-7px) rotate(-3deg); }
+    80% { transform: translateX(7px) rotate(3deg); }
+  }
+  @keyframes pop {
+    0% { transform: scale(1); opacity: 1; }
+    40% { transform: scale(1.25) rotate(-3deg); opacity: 1; }
+    100% { transform: scale(0); opacity: 0; }
+  }
+  .plus {
+    position: absolute; font-size: 28px; font-weight: 700; color: var(--teal);
+    -webkit-text-stroke: 1.5px var(--ink); pointer-events: none; z-index: 9;
+    animation: rise .8s ease-out forwards;
+  }
+  @keyframes rise { to { transform: translateY(-50px); opacity: 0; } }
+
+  #field.boom { animation: rumble .12s linear infinite; }
+  @keyframes rumble {
+    0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-5px, 3px); }
+    50% { transform: translate(4px, -4px); } 75% { transform: translate(-3px, -3px); }
+  }
+  #boomIcon {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    font-size: 170px; pointer-events: none; z-index: 20;
+  }
+  #field.boom #boomIcon { display: flex; animation: pop2 .9s ease-out forwards; }
+  @keyframes pop2 { 0% { transform: scale(.2); } 60% { transform: scale(1.2); } 100% { transform: scale(1); opacity: .9; } }
+
+  /* ---------- Overlay cards ---------- */
+  #overlay {
+    position: fixed; inset: 0; z-index: 50; display: none; align-items: center; justify-content: center;
+    padding: 16px; background: linear-gradient(var(--sky-top), var(--sky-bot));
+  }
+  #overlay.show { display: flex; }
+  .card {
+    width: min(480px, 100%); background: var(--card); text-align: center;
+    border: 4px solid var(--ink); border-radius: 28px; box-shadow: 0 8px 0 var(--ink);
+    padding: 28px 28px 32px; max-height: 100%; overflow: auto;
+  }
+  .card h1 { margin: 0 0 4px; font-size: 46px; line-height: 1.05; font-weight: 700; }
+  .card .sub { margin: 0 0 18px; font-size: 19px; opacity: .7; }
+  .tiles { display: flex; justify-content: center; gap: 10px; margin: 0 0 18px; }
+  .tile {
+    padding: 10px 16px; font-size: 28px; font-weight: 700; border: 3px solid var(--ink);
+    border-radius: 12px; box-shadow: 0 4px 0 var(--ink);
+  }
+  .tile:nth-child(1) { background: #ffd7cf; transform: rotate(-4deg); }
+  .tile:nth-child(2) { background: #cfe6ff; transform: rotate(3deg); }
+  .rules { list-style: none; padding: 0; margin: 0 0 22px; text-align: left; font-size: 17px; line-height: 1.35; }
+  .rules li { display: flex; gap: 10px; padding: 5px 0; }
+  .rules b { flex: none; width: 26px; text-align: center; }
+  .btn {
+    font: 700 22px "Fredoka", "Trebuchet MS", system-ui, sans-serif; color: #fff; cursor: pointer;
+    padding: 12px 30px; border: 3px solid var(--ink); border-radius: 999px;
+    box-shadow: 0 5px 0 var(--ink); background: var(--coral);
+    transition: transform .1s, box-shadow .1s;
+  }
+  .btn.blue { background: var(--blue); }
+  .btn.green { background: var(--teal); }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 7px 0 var(--ink); }
+  .btn:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--ink); }
+  .btn:focus-visible { outline: 4px solid var(--ink); outline-offset: 4px; }
+  .scores { display: grid; gap: 10px; margin: 0 0 22px; }
+  .scoreRow {
+    display: flex; justify-content: space-between; align-items: center; padding: 10px 16px;
+    border: 3px solid var(--ink); border-radius: 16px; font-size: 24px; font-weight: 600;
+  }
+  .scoreRow.win { background: var(--sun); box-shadow: 0 4px 0 var(--ink); }
+  .trophy { font-size: 72px; line-height: 1; margin-bottom: 6px; }
+
+  @media (max-width: 520px) {
+    .block { font-size: 22px; }
+    .card h1 { font-size: 36px; }
+    #score { font-size: 28px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .block.selected .inner, #field.boom { animation: none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="hud">
+    <div class="badge p1" id="playerBadge">Player 1</div>
+    <div id="score"><small>Score</small><span id="scoreNum">0</span></div>
+    <div id="level">Level 1</div>
+  </div>
+  <div id="field">
+    <div id="dangerLine"><span>Don't stack above here!</span></div>
+    <div id="boomIcon">💥</div>
+  </div>
+</div>
+<div id="overlay"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var PAIRS = [
+    ['open','close'],['tall','short'],['first','last'],['boy','girl'],['man','woman'],
+    ['early','late'],['little','big'],['off','on'],['top','bottom'],['under','over'],
+    ['near','far'],['heavy','light'],['work','play'],['poor','rich'],['left','right'],
+    ['sick','well'],['ugly','pretty'],['loud','soft'],['morning','night'],['large','small'],
+    ['smart','dumb'],['inside','outside'],['ahead','behind'],['sun','moon'],['north','south'],
+    ['east','west'],['summer','winter'],['autumn','spring'],['most','least'],['few','many']
+  ];
+
+  var BH = 62;           // block height
+  var GROUND = 28;       // ground strip height
+  var SPEAKER = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var field = $('field'), overlay = $('overlay');
+
+  var st = {
+    running: false, player: 0, scores: [0, 0], score: 0,
+    boxes: [], queue: [], selected: null, nextId: 1,
+    spawnTimer: 0, boxW: 150, dangerY: 0, W: 0, H: 0, maxStack: 5, last: 0, raf: 0
+  };
+
+  /* ---------- Audio (created on first user gesture) ---------- */
+  var audioCtx = null;
+  function ensureAudio() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (e) { audioCtx = null; }
+  }
+  function tone(freqs, dur, type, vol) {
+    if (!audioCtx) return;
+    try {
+      var t = audioCtx.currentTime, o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = type || 'sine';
+      freqs.forEach(function (f, i) { o.frequency.setValueAtTime(f, t + i * dur / freqs.length); });
+      g.gain.setValueAtTime(vol || 0.2, t);
+      g.gain.exponentialRampToValueAtTime(0.01, t + dur);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(t); o.stop(t + dur);
+    } catch (e) {}
+  }
+  var sfx = {
+    match: function () { tone([523, 659, 784, 1047], 0.45, 'triangle', 0.25); },
+    land: function () { tone([180], 0.12, 'sine', 0.12); },
+    wrong: function () { tone([220, 170], 0.25, 'sawtooth', 0.08); },
+    over: function () { tone([523, 494, 440, 330], 0.9, 'triangle', 0.25); }
+  };
+  function speak(word) {
+    try {
+      var s = window.speechSynthesis;
+      if (!s) return;
+      s.cancel();
+      var u = new SpeechSynthesisUtterance(word);
+      u.rate = 0.9; u.pitch = 1.1;
+      s.speak(u);
+    } catch (e) {}
+  }
+
+  /* ---------- Layout ---------- */
+  function measure() {
+    st.W = field.clientWidth; st.H = field.clientHeight;
+    st.boxW = Math.max(110, Math.min(170, Math.floor(st.W * 0.42)));
+    st.maxStack = Math.max(3, Math.floor((st.H - GROUND) / BH) - 2);
+    st.dangerY = st.H - GROUND - st.maxStack * BH;
+    $('dangerLine').style.top = (st.dangerY - 6) + 'px';
+    st.boxes.forEach(function (b) {
+      b.x = Math.max(0, Math.min(b.x, st.W - st.boxW));
+      b.el.style.width = st.boxW + 'px';
+    });
+  }
+  // Boxes overlapping horizontally (they can rest on each other)
+  function overlaps(a, b) { return Math.abs(a.x - b.x) < st.boxW - 4; }
+  // Lowest y a box can fall to, given the settled boxes beneath it
+  function restY(b) {
+    var y = st.H - GROUND - BH;
+    st.boxes.forEach(function (o) {
+      if (o !== b && !o.falling && !o.gone && o.y > b.y - BH + 1 && overlaps(o, b)) {
+        y = Math.min(y, o.y - BH);
+      }
+    });
+    return y;
+  }
+
+  /* ---------- Spawning ---------- */
+  function speed() { return Math.min(55 + st.score * 0.9, 200); }
+  function spawnEvery() { return Math.max(1300, 2800 - st.score * 9); }
+
+  function pickWord() {
+    // an antonym that's due to appear
+    for (var i = 0; i < st.queue.length; i++) {
+      st.queue[i].wait--;
+    }
+    var due = st.queue.filter(function (q) { return q.wait <= 0; });
+    if (due.length) {
+      var q = due[0];
+      st.queue.splice(st.queue.indexOf(q), 1);
+      return { word: q.word, pair: q.pair };
+    }
+    var idx = Math.floor(Math.random() * PAIRS.length);
+    var flip = Math.random() < 0.5 ? 1 : 0;
+    st.queue.push({ word: PAIRS[idx][1 - flip], pair: idx, wait: 2 + Math.floor(Math.random() * 3) });
+    return { word: PAIRS[idx][flip], pair: idx };
+  }
+
+  function spawn() {
+    var falling = st.boxes.filter(function (b) { return b.falling && !b.gone; });
+    if (falling.length >= 5) return;
+    // pick a random spot that isn't right on top of another falling block
+    var x = null;
+    for (var tries = 0; tries < 12 && x === null; tries++) {
+      var cx = 8 + Math.random() * Math.max(0, st.W - st.boxW - 16);
+      var probe = { x: cx, y: -BH };
+      var blocked = falling.some(function (b) { return b.y < BH + 14 && overlaps(b, probe); });
+      if (!blocked) x = cx;
+    }
+    if (x === null) return;
+    var w = pickWord();
+    var box = {
+      id: st.nextId++, word: w.word, pair: w.pair,
+      x: x,
+      y: -BH, falling: true, gone: false, el: null
+    };
+    var el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'block c' + Math.floor(Math.random() * 5);
+    el.style.width = st.boxW + 'px'; el.style.height = BH + 'px';
+    el.innerHTML = '<span class="inner">' + SPEAKER + '<span>' + w.word + '</span></span>';
+    el.addEventListener('click', function () { onBox(box); });
+    box.el = el;
+    field.appendChild(el);
+    st.boxes.push(box);
+    place(box);
+  }
+
+  function place(b) {
+    b.el.style.transform = 'translate(' + b.x + 'px,' + b.y + 'px)';
+  }
+
+  /* ---------- Game loop ---------- */
+  function update(dt) {
+    st.spawnTimer += dt;
+    if (st.spawnTimer >= spawnEvery()) { st.spawnTimer = 0; spawn(); }
+
+    var v = speed();
+    var lost = false;
+    // settled boxes whose support was cleared start falling again (lowest first)
+    st.boxes.filter(function (b) { return !b.falling && !b.gone; })
+      .sort(function (a, b) { return b.y - a.y; })
+      .forEach(function (b) {
+        if (restY(b) > b.y + 0.5) { b.falling = true; b.el.classList.remove('settled'); }
+      });
+    // falling boxes: lowest first so stacking resolves in order
+    st.boxes.filter(function (b) { return b.falling && !b.gone; })
+      .sort(function (a, b) { return b.y - a.y; })
+      .forEach(function (b) {
+        b.y += v * dt / 1000;
+        var target = restY(b);
+        if (b.y >= target) {
+          b.y = target; b.falling = false;
+          b.el.classList.add('settled');
+          sfx.land();
+          if (b.y <= st.dangerY + 0.5) lost = true;
+        }
+        place(b);
+      });
+    if (lost) gameOver();
+    var lvl = 1 + Math.floor(st.score / 50);
+    $('level').textContent = 'Level ' + lvl;
+  }
+
+  function frame(t) {
+    if (!st.running) return;
+    var dt = Math.min(50, t - (st.last || t));
+    st.last = t;
+    update(dt);
+    st.raf = requestAnimationFrame(frame);
+  }
+
+  /* ---------- Interaction ---------- */
+  function setSelected(b) {
+    if (st.selected && st.selected.el) st.selected.el.classList.remove('selected');
+    st.selected = b;
+    if (b) b.el.classList.add('selected');
+  }
+
+  function wiggle(b) {
+    b.el.classList.add('wrong');
+    setTimeout(function () { b.el.classList.remove('wrong'); }, 460);
+  }
+
+  function remove(b) {
+    b.gone = true;
+    b.el.classList.add('pop');
+    setTimeout(function () { if (b.el.parentNode) b.el.parentNode.removeChild(b.el); }, 320);
+  }
+
+  function onBox(b) {
+    if (!st.running || b.gone) return;
+    ensureAudio();
+    speak(b.word);
+    var s = st.selected;
+    if (!s) { setSelected(b); return; }
+    if (s.id === b.id) { setSelected(null); return; }
+    if (s.pair === b.pair && s.word !== b.word) {
+      sfx.match();
+      st.score += 10;
+      $('scoreNum').textContent = st.score;
+      // drop the matching word from the waiting list if its partner hasn't appeared yet
+      st.queue = st.queue.filter(function (q) { return q.pair !== b.pair; });
+      var plus = document.createElement('div');
+      plus.className = 'plus'; plus.textContent = '+10';
+      plus.style.left = (b.x + st.boxW / 2 - 24) + 'px';
+      plus.style.top = (b.y) + 'px';
+      field.appendChild(plus);
+      setTimeout(function () { plus.remove(); }, 800);
+      setSelected(null);
+      remove(s); remove(b);
+    } else {
+      sfx.wrong();
+      wiggle(s); wiggle(b);
+      setSelected(b);
+    }
+  }
+
+  /* ---------- Flow ---------- */
+  function clearField() {
+    st.boxes.forEach(function (b) { if (b.el.parentNode) b.el.parentNode.removeChild(b.el); });
+    st.boxes = []; st.queue = []; st.selected = null;
+    field.classList.remove('boom');
+    Array.prototype.forEach.call(field.querySelectorAll('.plus'), function (n) { n.remove(); });
+  }
+
+  function startTurn() {
+    ensureAudio();
+    overlay.classList.remove('show');
+    clearField();
+    measure();
+    st.score = 0; st.spawnTimer = 0; st.last = 0; st.running = true;
+    $('scoreNum').textContent = '0';
+    var badge = $('playerBadge');
+    badge.textContent = 'Player ' + (st.player + 1);
+    badge.className = 'badge ' + (st.player ? 'p2' : 'p1');
+    spawn();
+    cancelAnimationFrame(st.raf);
+    st.raf = requestAnimationFrame(frame);
+  }
+
+  function gameOver() {
+    st.running = false;
+    cancelAnimationFrame(st.raf);
+    sfx.over();
+    st.scores[st.player] = st.score;
+    field.classList.add('boom');
+    setTimeout(showResult, 1500);
+  }
+
+  function show(html) { overlay.innerHTML = '<div class="card">' + html + '</div>'; overlay.classList.add('show'); }
+
+  function showStart() {
+    st.scores = [0, 0]; st.player = 0; clearField();
+    show(
+      '<div class="tiles"><span class="tile">hot</span><span class="tile">cold</span></div>' +
+      '<h1>Antonym Match</h1><p class="sub">A two-player word game</p>' +
+      '<ul class="rules">' +
+        '<li><b>👆</b><span>Tap a word block to hear it read aloud.</span></li>' +
+        '<li><b>🎯</b><span>Tap two blocks that are opposites to clear them.</span></li>' +
+        '<li><b>⚡</b><span>The blocks fall faster as your score climbs.</span></li>' +
+        '<li><b>🧱</b><span>Unmatched blocks pile up. Don\'t let a tower reach the dashed line!</span></li>' +
+        '<li><b>🔄</b><span>Players take turns. Highest score wins.</span></li>' +
+      '</ul>' +
+      '<button class="btn" id="go">Player 1, start!</button>'
+    );
+    $('go').onclick = startTurn;
+    $('go').focus();
+  }
+
+  function showResult() {
+    if (st.player === 0) {
+      show(
+        '<div class="trophy">🏁</div><h1>Player 1 is done!</h1>' +
+        '<p class="sub">You scored</p>' +
+        '<div class="tiles"><span class="tile" style="font-size:44px;transform:none;background:#ffeaa8">' + st.scores[0] + '</span></div>' +
+        '<p class="sub">Pass it over. Can Player 2 beat that?</p>' +
+        '<button class="btn blue" id="next">Player 2, go!</button>'
+      );
+      $('next').onclick = function () { st.player = 1; startTurn(); };
+      $('next').focus();
+    } else {
+      var a = st.scores[0], b = st.scores[1];
+      var title = a === b ? "It's a tie!" : 'Player ' + (a > b ? 1 : 2) + ' wins!';
+      show(
+        '<div class="trophy">🏆</div><h1>' + title + '</h1><p class="sub">Final scores</p>' +
+        '<div class="scores">' +
+          '<div class="scoreRow' + (a >= b ? ' win' : '') + '"><span>Player 1</span><span>' + a + '</span></div>' +
+          '<div class="scoreRow' + (b >= a ? ' win' : '') + '"><span>Player 2</span><span>' + b + '</span></div>' +
+        '</div>' +
+        '<button class="btn green" id="again">Play again</button>'
+      );
+      $('again').onclick = showStart;
+      $('again').focus();
+    }
+  }
+
+  window.addEventListener('resize', function () { if (st.running) measure(); });
+  showStart();
+})();
+</script>
+</body>
+</html>
